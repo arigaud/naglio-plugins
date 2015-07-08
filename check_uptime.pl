@@ -3,8 +3,8 @@
 # ============================== SUMMARY =====================================
 #
 # Program : check_uptime.pl
-# Version : 0.521
-# Date    : Oct 4, 2012
+# Version : 0.53
+# Date    : July 8, 2015
 # Authors : William Leibzon - william@leibzon.org
 # Licence : GPL - summary below, full text at http://www.fsf.org/licenses/gpl.txt
 #
@@ -145,6 +145,7 @@
 #		        output to go to instead of console and for '--debug'
 #			option as an alias to '--verbose'.
 # 0.521 - Oct 4, 2012 : Small bug in one of regex, see issue #11 on github
+# 0.530 - Jul 8, 2015 : Added parameter to switch min/max uptime
 #
 # TODO:
 #   0) Add '--extra-opts' to allow to read options from a file as specified
@@ -213,6 +214,7 @@ my $o_prevperf=		undef;	# performance data given with $SERVICEPERFDATA$ macro
 my $o_warn=             undef;  # WARNING alert if system has been up for < specified number of minutes
 my $o_crit=             undef;  # CRITICAL alert if system has been up for < specified number of minutes
 my $o_type=             undef;  # type of check (local, auto, unix, win)
+my $o_sample=		'min';  # check min or max, recently rebooted or too long uptime (min is default)
 
 # Login and other options specific to SNMP
 my $o_port =		161;    # SNMP port
@@ -288,6 +290,10 @@ Standard Options:
    Optional custom label before results prefixed to results
  -t, --timeout=INTEGER
    timeout for SNMP in seconds (Default: 15)
+ -S, --sample=min|max
+   Type of sample :
+	min		: alert if system has been rebooted since last check
+	max		: alert if systeme is up for a long time
 
 SNMP Access Options:
  -H, --hostname=HOST
@@ -376,6 +382,7 @@ sub check_options {
 	'label:s'   => \$o_label,
 	'P:s'	=> \$o_prevperf,	'prev_perfdata:s' => \$o_prevperf,
 	'T:s'   => \$o_type,            'type:s'        => \$o_type,
+	'S:s'	=> \$o_sample,		'sample:s'	=> \$o_sample
     );
     if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
@@ -698,13 +705,21 @@ if (defined($o_perf)) {
 }
 
 if (defined($uptime_minutes)) {
-  if (defined($o_prevperf)) {
+  if (defined($o_prevperf) && $o_sample eq 'min') {
    	$status = 1 if defined($o_warn) && exists($prev_perf{uptime_minutes}) && $prev_perf{uptime_minutes} > $uptime_minutes;
    	$status = 2 if defined($o_crit) && exists($prev_perf{uptime_minutes}) && $prev_perf{uptime_minutes} > $uptime_minutes;
   }
-  else {
+  elsif (defined($o_prevperf) && $o_sample == 'max') {
+	$status = 1 if defined($o_warn) && exists($prev_perf{uptime_minutes}) && $prev_perf{uptime_minutes} < $uptime_minutes;
+	$status = 2 if defined($o_crit) && exists($prev_perf{uptime_minutes}) && $prev_perf{uptime_minutes} < $uptime_minutes;
+  }
+  elsif ($o_sample eq 'min') {
    	$status = 1 if defined($o_warn) && !isnnum($o_warn) && $o_warn >= $uptime_minutes;
    	$status = 2 if defined($o_crit) && !isnnum($o_crit) && $o_crit >= $uptime_minutes;
+  }
+  else {
+	$status = 1 if defined($o_warn) && !isnnum($o_warn) && $o_warn <= $uptime_minutes;
+   	$status = 2 if defined($o_crit) && !isnnum($o_crit) && $o_crit <= $uptime_minutes;
   }
 }
 alarm(0);
